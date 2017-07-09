@@ -1,0 +1,4 @@
+flotils>=0.3.5a0, <0.4
+nameko>=2.6.0, <2.7
+alexander_fw>=0.2.1, <0.3
+six
