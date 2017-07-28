@@ -12,11 +12,10 @@ __version__ = "0.1.0"
 __date__ = "2017-07-08"
 # Created: 2017-07-07 19:10
 
-from nameko.rpc import rpc
 from nameko.timer import timer
 from nameko.extensions import DependencyProvider
 from nameko.events import EventDispatcher
-from alexander_fw import CommunicatorService
+from alexander_fw import CommunicatorService, StandaloneCommunicatorService
 from alexander_fw.dto import InputMessage
 from flotils import get_logger
 
@@ -49,12 +48,10 @@ class TelegramDependency(DependencyProvider):
         return self.instance
 
 
-class TelegramService(CommunicatorService):
+class StandaloneTelegramService(StandaloneCommunicatorService):
     name = "service_communicator_telegram"
-
-    telegram = TelegramDependency()
+    telegram = None
     """ :type : communicator_telegram.TelegramClient """
-    # dispatch = EventDispatcher()
 
     def do_say(self, msg):
         """
@@ -81,17 +78,17 @@ class TelegramService(CommunicatorService):
         if text and to:
             self.telegram.send(to, text, reply)
 
-    def _pop_commands(self):
+    def pop_commands(self):
         msgs = self.telegram.get_commands()
         self.telegram.delete_commands([msg['update_id'] for msg in msgs])
         return msgs
 
-    def _pop_texts(self):
+    def pop_texts(self):
         msgs = self.telegram.get_texts()
         self.telegram.delete_texts([msg['update_id'] for msg in msgs])
         return msgs
 
-    def _to_input_message(self, t_msg):
+    def to_input_message(self, t_msg):
         result = InputMessage()
         t = t_msg.get('timestamp')
         if t:
@@ -102,19 +99,25 @@ class TelegramService(CommunicatorService):
             result.metadata = t_msg
         return result
 
+
+class TelegramService(CommunicatorService, StandaloneTelegramService):
+
+    telegram = TelegramDependency()
+    """ :type : communicator_telegram.TelegramClient """
+
     @timer(interval=1)
     def _timer_msgs_emit(self):
-        cmds = self._pop_commands()
+        cmds = self.pop_commands()
         for cmd in cmds:
             try:
-                im = self._to_input_message(cmd)
+                im = self.to_input_message(cmd)
                 self.communicate(im)
             except:
                 logger.exception("Failed to communicate message\n{}".format(im))
-        txts = self._pop_texts()
+        txts = self.pop_texts()
         for txt in txts:
             try:
-                im = self._to_input_message(txt)
+                im = self.to_input_message(txt)
                 self.communicate(im)
             except:
                 logger.exception("Failed to communicate message\n{}".format(im))

@@ -8,8 +8,8 @@ __author__ = "d01"
 __email__ = "jungflor@gmail.com"
 __copyright__ = "Copyright (C) 2017, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.1.0"
-__date__ = "2017-07-08"
+__version__ = "0.1.1"
+__date__ = "2017-07-28"
 # Created: 2017-07-07 19:16
 
 from pprint import pformat
@@ -42,6 +42,10 @@ class TelegramClient(Loadable, StartStopable):
         self._command_queue = []
         self._text_queue = []
         self._queue_lock = threading.RLock()
+        self.new_text = threading.Event()
+        """ New text in queue """
+        self.new_command = threading.Event()
+        """ New command in queue"""
 
     def _thread_wrapper(self, function, *args, **kwargs):
         """
@@ -174,15 +178,15 @@ class TelegramClient(Loadable, StartStopable):
         :type user_data: dict
         :rtype: None
         """
-        self.debug("{}".format(update))
         result = self._parse_message(update)
 
-        if user_data is not None:
-            self.debug(pformat(user_data))
+        if user_data:
+            self.debug("User data: {}".format(pformat(user_data)))
 
         with self._queue_lock:
             if result:
                 self._text_queue.append(result)
+                self.new_text.set()
             else:
                 self.warning("Did not add message\n{}".format(update))
 
@@ -196,7 +200,6 @@ class TelegramClient(Loadable, StartStopable):
         :type update: telegram.Update
         :rtype: None
         """
-        self.debug("{}".format(update))
         result = self._parse_message(update)
 
         if result.get('message') and result['message'].startswith("/"):
@@ -206,6 +209,7 @@ class TelegramClient(Loadable, StartStopable):
         with self._queue_lock:
             if result:
                 self._command_queue.append(result)
+                self.new_command.set()
             else:
                 self.warning("Did not add command\n{}".format(update))
 
@@ -235,6 +239,8 @@ class TelegramClient(Loadable, StartStopable):
                 for cmd in self._command_queue
                 if cmd['update_id'] not in ids
             ]
+            if len(self._command_queue) == 0:
+                self.new_command.clear()
 
     def get_texts(self):
         """
@@ -262,6 +268,8 @@ class TelegramClient(Loadable, StartStopable):
                 for cmd in self._text_queue
                 if cmd['update_id'] not in ids
             ]
+            if len(self._text_queue) == 0:
+                self.new_text.clear()
 
     def send(self, to, text, reply_to_message_id=None, silent=False):
         self._updater.bot.send_message(
@@ -275,6 +283,12 @@ class TelegramClient(Loadable, StartStopable):
     def start(self, blocking=False):
         self.debug("()")
         self.cache_load()
+        if self._command_queue:
+            # Got commands
+            self.new_command.set()
+        if self._text_queue:
+            # Got commands
+            self.new_text.set()
         self.map_load()
         self._updater.dispatcher.add_error_handler(self._error_handler)
         self._updater.dispatcher.add_handler(MessageHandler(
