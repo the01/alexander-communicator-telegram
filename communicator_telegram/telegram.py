@@ -8,13 +8,14 @@ __author__ = "d01"
 __email__ = "jungflor@gmail.com"
 __copyright__ = "Copyright (C) 2017, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.1.1"
-__date__ = "2017-07-28"
+__version__ = "0.1.2"
+__date__ = "2017-08-03"
 # Created: 2017-07-07 19:16
 
 from pprint import pformat
 import datetime
 import threading
+import time
 
 from flotils import Loadable, StartStopable
 from six import string_types, text_type
@@ -157,9 +158,16 @@ class TelegramClient(Loadable, StartStopable):
             result['timestamp'] = message.date
 
             if result['timestamp']:
+                dt_obj = message.date
                 # To utc
+                try:
+                    # Python 3.3+
+                    result['timestamp'] = int(dt_obj.timestamp())
+                except AttributeError:
+                    # Python 3 (< 3.3) and Python 2
+                    result['timestamp'] = int(time.mktime(dt_obj.timetuple()))
                 result['timestamp'] = datetime.datetime.utcfromtimestamp(
-                    message._totimestamp(result['timestamp'])
+                    result['timestamp']
                 )
             result['message'] = message.text
 
