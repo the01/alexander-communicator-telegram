@@ -8,20 +8,23 @@ __author__ = "d01"
 __email__ = "jungflor@gmail.com"
 __copyright__ = "Copyright (C) 2017, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.1.2"
-__date__ = "2017-08-03"
+__version__ = "0.1.3"
+__date__ = "2017-08-17"
 # Created: 2017-07-07 19:16
 
 from pprint import pformat
 import datetime
 import threading
 import time
+import base64
+from io import BytesIO
 
 from flotils import Loadable, StartStopable
 from six import string_types, text_type
 import telegram
 import telegram.ext
 from telegram.ext import Updater, MessageHandler, Filters
+from telegram.error import TimedOut
 
 
 class TelegramClient(Loadable, StartStopable):
@@ -40,6 +43,7 @@ class TelegramClient(Loadable, StartStopable):
         self._poll_interval = settings.get("telegram_poll_interval", 0.0)
         self._timeout = settings.get("telegram_timeout", 10.0)
         self._block_unknown = settings.get("block_unknown_users", True)
+        self._max_resends = settings.get("max_retry_send", 2)
         self._command_queue = []
         self._text_queue = []
         self._queue_lock = threading.RLock()
@@ -279,14 +283,48 @@ class TelegramClient(Loadable, StartStopable):
             if len(self._text_queue) == 0:
                 self.new_text.clear()
 
-    def send(self, to, text, reply_to_message_id=None, silent=False):
-        self._updater.bot.send_message(
-            to, text, reply_to_message_id=reply_to_message_id,
-            disable_notification=silent
-        )
+    def send(self, to, text, reply_to_message_id=None, silent=False, tries=0):
+        if isinstance(text, dict) and text.get('type') == "image":
+            try:
+                decoded = base64.b64decode(text.get('value'))
+                bio = BytesIO()
+                bio.name = "image"
+                bio.write(decoded)
+                bio.flush()
+                bio.seek(0)
+            except:
+                self.debug("Not b64")
+            else:
+                try:
+                    self._updater.bot.send_photo(
+                        to, bio, reply_to_message_id=reply_to_message_id
+                    )
+                    return
+                except TimedOut:
+                    if tries >= self._max_resends:
+                        raise
+                    self.warning("Send timed out, retrying #{}..".format(tries))
+                    return self.send(
+                        to, text, reply_to_message_id, silent, tries + 1
+                    )
+        if text:
+            text = "{}".format(text)
+
+        try:
+            self._updater.bot.send_message(
+                to, text, reply_to_message_id=reply_to_message_id,
+                disable_notification=silent
+            )
+        except TimedOut:
+            if tries >= self._max_resends:
+                raise
+            self.warning("Send timed out, retrying #{}..".format(tries))
+            return self.send(
+                to, text, reply_to_message_id, silent, tries + 1
+            )
 
     def reply(self, to, text, reply_to_message_id, silent=False):
-        self._updater.bot.send_message(to, text, reply_to_message_id, silent)
+        self.send(to, text, reply_to_message_id, silent)
 
     def start(self, blocking=False):
         self.debug("()")

@@ -8,13 +8,12 @@ __author__ = "d01"
 __email__ = "jungflor@gmail.com"
 __copyright__ = "Copyright (C) 2017, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.1.0"
-__date__ = "2017-07-08"
+__version__ = "0.1.1"
+__date__ = "2017-07-17"
 # Created: 2017-07-07 19:10
 
 from nameko.timer import timer
 from nameko.extensions import DependencyProvider
-from nameko.events import EventDispatcher
 from alexander_fw import CommunicatorService, StandaloneCommunicatorService
 from alexander_fw.dto import InputMessage
 from flotils import get_logger
@@ -63,6 +62,7 @@ class StandaloneTelegramService(StandaloneCommunicatorService):
         from pprint import pformat
         logger.info("Got:\n{}".format(pformat(msg.to_dict())))
         meta = msg.metadata
+        """ :type : dict """
         to = reply = text = None
 
         if meta:
@@ -73,8 +73,6 @@ class StandaloneTelegramService(StandaloneCommunicatorService):
             if to is None and meta.get('user'):
                 to = meta['user']['id']
             text = msg.result
-            if text:
-                text = "{}".format(text)
         if text and to:
             self.telegram.send(to, text, reply)
 
