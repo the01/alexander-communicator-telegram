@@ -191,6 +191,9 @@ class TelegramClient(Loadable, StartStopable):
         :rtype: None
         """
         result = self._parse_message(update)
+        if result is None:
+            # Blocked user
+            return
 
         if user_data:
             self.debug("User data: {}".format(pformat(user_data)))
@@ -213,6 +216,9 @@ class TelegramClient(Loadable, StartStopable):
         :rtype: None
         """
         result = self._parse_message(update)
+        if result is None:
+            # Blocked user
+            return
 
         if result.get('message') and result['message'].startswith("/"):
             parts = result['message'][1:].split()
