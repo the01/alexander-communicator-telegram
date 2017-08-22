@@ -49,10 +49,12 @@ class TelegramDependency(DependencyProvider):
 
 class StandaloneTelegramService(StandaloneCommunicatorService):
     name = "service_communicator_telegram"
+    allowed = ["status", "say", "send"]
     telegram = None
     """ :type : communicator_telegram.TelegramClient """
 
     def send(self, to, text, reply_to_message_id=None, silent=False):
+        # TODO send by user name
         self.telegram.send(to, text, reply_to_message_id, silent)
 
     def do_say(self, msg):
