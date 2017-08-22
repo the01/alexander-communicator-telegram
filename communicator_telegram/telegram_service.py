@@ -8,8 +8,8 @@ __author__ = "d01"
 __email__ = "jungflor@gmail.com"
 __copyright__ = "Copyright (C) 2017, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.1.1"
-__date__ = "2017-07-17"
+__version__ = "0.1.2"
+__date__ = "2017-07-22"
 # Created: 2017-07-07 19:10
 
 from nameko.timer import timer
@@ -51,6 +51,9 @@ class StandaloneTelegramService(StandaloneCommunicatorService):
     name = "service_communicator_telegram"
     telegram = None
     """ :type : communicator_telegram.TelegramClient """
+
+    def send(self, to, text, reply_to_message_id=None, silent=False):
+        self.telegram.send(to, text, reply_to_message_id, silent)
 
     def do_say(self, msg):
         """
