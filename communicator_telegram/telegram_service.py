@@ -8,8 +8,8 @@ __author__ = "d01"
 __email__ = "jungflor@gmail.com"
 __copyright__ = "Copyright (C) 2017, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.1.2"
-__date__ = "2017-07-22"
+__version__ = "0.1.3"
+__date__ = "2017-12-02"
 # Created: 2017-07-07 19:10
 
 from nameko.timer import timer
@@ -99,7 +99,7 @@ class StandaloneTelegramService(StandaloneCommunicatorService):
         if t_msg.get('message'):
             # Should only send message of this type?
             result.data = t_msg['message']
-            result.metadata = t_msg
+        result.metadata = t_msg
         return result
 
 

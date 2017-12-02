@@ -9,7 +9,7 @@ __email__ = "jungflor@gmail.com"
 __copyright__ = "Copyright (C) 2017, Florian JUNG"
 __license__ = "MIT"
 __version__ = "0.1.3"
-__date__ = "2017-08-17"
+__date__ = "2017-12-02"
 # Created: 2017-07-07 19:16
 
 from pprint import pformat
@@ -50,7 +50,7 @@ class TelegramClient(Loadable, StartStopable):
         self.new_text = threading.Event()
         """ New text in queue """
         self.new_command = threading.Event()
-        """ New command in queue"""
+        """ New command in queue """
 
     def _thread_wrapper(self, function, *args, **kwargs):
         """
@@ -174,6 +174,8 @@ class TelegramClient(Loadable, StartStopable):
                     result['timestamp']
                 )
             result['message'] = message.text
+            if message.location:
+                result['location'] = message.location.to_dict()
 
             # self.debug(message.parse_entities())
         return result
@@ -348,6 +350,9 @@ class TelegramClient(Loadable, StartStopable):
         ))
         self._updater.dispatcher.add_handler(MessageHandler(
             Filters.text, self._text_handler, pass_user_data=True
+        ))
+        self._updater.dispatcher.add_handler(MessageHandler(
+            Filters.location, self._text_handler, pass_user_data=True
         ))
 
         self._updater.start_polling(

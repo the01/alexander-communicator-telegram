@@ -8,8 +8,8 @@ __author__ = "d01"
 __email__ = "jungflor@gmail.com"
 __copyright__ = "Copyright (C) 2017, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.1.0"
-__date__ = "2017-07-08"
+__version__ = "0.1.1"
+__date__ = "2017-12-02"
 # Created: 2017-07-08 13:34
 
 import threading
@@ -164,6 +164,7 @@ class TelegramRunner(Loadable, StartStopable, SignalStopWrapper):
 
 
 if __name__ == "__main__":
+    import logging
     import logging.config
     import os
     import sys
@@ -172,6 +173,7 @@ if __name__ == "__main__":
     from flotils.logable import default_logging_config, get_logger
     from flotils.loadable import load_file
 
+    logging.captureWarnings(True)
     logging.config.dictConfig(default_logging_config)
     logging.getLogger().setLevel(logging.DEBUG)
     logging.getLogger("amqp").setLevel(logging.INFO)
@@ -219,9 +221,9 @@ if __name__ == "__main__":
 
     logger = get_logger()
     pid = os.getpid()
-    logger.info(u"Detected pid {}".format(pid))
-    logger.info(u"Using virtualenv {}".format(hasattr(sys, 'real_prefix')))
-    logger.info(u"Using supervisor {}".format(
+    logger.info("Detected pid {}".format(pid))
+    logger.info("Using virtualenv {}".format(hasattr(sys, 'real_prefix')))
+    logger.info("Using supervisor {}".format(
         bool(os.getenv('SUPERVISOR_ENABLED', False)))
     )
 
