@@ -220,8 +220,7 @@ if __name__ == "__main__":
         logging.getLogger().setLevel(logging.DEBUG)
 
     logger = get_logger()
-    pid = os.getpid()
-    logger.info("Detected pid {}".format(pid))
+    logger.info("Detected pid {}".format(os.getpid()))
     logger.info("Using virtualenv {}".format(hasattr(sys, 'real_prefix')))
     logger.info("Using supervisor {}".format(
         bool(os.getenv('SUPERVISOR_ENABLED', False)))
