@@ -14,9 +14,11 @@ __date__ = "2017-12-02"
 
 import threading
 import errno
+import time
 
 from flotils.runable import SignalStopWrapper
 from flotils import StartStopable, Loadable
+from nameko.standalone.rpc import ClusterRpcProxy
 from alexander_fw import setup_kombu, RPCListener
 from alexander_fw.service import event_dispatcher
 
@@ -41,6 +43,7 @@ class TelegramRunner(Loadable, StartStopable, SignalStopWrapper):
             nameko_settings.setdefault('path_prefix', self._prePath)
         self.dispatcher = event_dispatcher(nameko_settings)
         self.telegram = TelegramClient(telegram_settings)
+        self.telegram.get_user_external = self._rpc_service_user_get_authorized
         self.service = StandaloneTelegramService()
         self.service.dispatch_intent = self._dispatch_intent
         self.service.telegram = self.telegram
@@ -48,6 +51,10 @@ class TelegramRunner(Loadable, StartStopable, SignalStopWrapper):
         nameko_settings['service'] = self.service
         nameko_settings['allowed_functions'] = self.service.allowed
         self.listener = RPCListener(nameko_settings)
+        self._cluster_proxy = ClusterRpcProxy(
+            nameko_settings, timeout=nameko_settings.get('rpc_timeout', None)
+        )
+        self._proxy = None
         self._done = threading.Event()
         self._polling_timeout = settings.get('polling_interval', 2.0)
 
@@ -97,9 +104,44 @@ class TelegramRunner(Loadable, StartStopable, SignalStopWrapper):
     def _dispatch_intent(self, event_type, event_data):
         self.dispatcher("manager_intent", event_type, event_data)
 
+    def _rpc_service_user_get_authorized(self, user_id):
+        self.debug("({})".format(user_id))
+        if not self._proxy:
+            self.warning("No proxy available")
+            return None
+        resp = self._proxy.service_user.get_authorized(
+            self.service.name, user_id
+        )
+        if not resp:
+            return None
+        user, permission = resp
+        # TODO: check permission
+        if not permission or not user:
+            return None
+        self.debug("Matched user: {}".format(user))
+        return user.get('uuid')
+
     def start(self, blocking=False):
         self.debug("()")
         super(TelegramRunner, self).start(False)
+        self.debug("Starting rpc proxy..")
+        tries = 3
+        sleep_time = 1.4
+        while tries > 0:
+            self.debug("Trying to establish nameko proxy..")
+            try:
+                self._proxy = self._cluster_proxy.start()
+            except:
+                if tries <= 1:
+                    raise
+                self.exception("Failed to connect proxy")
+                self.info("Sleeping {}s".format(round(sleep_time, 2)))
+                time.sleep(sleep_time)
+                sleep_time **= 2
+            else:
+                break
+            tries -= 1
+        self.service.proxy = self._proxy
         self.debug("Starting telegram client..")
         try:
             self.telegram.start(False)
@@ -108,7 +150,6 @@ class TelegramRunner(Loadable, StartStopable, SignalStopWrapper):
             self.stop()
             return
         self.info("Telegram client running")
-        setup_kombu()
         self.debug("Starting rpc listener")
         try:
             self.listener.start(False)
@@ -161,6 +202,15 @@ class TelegramRunner(Loadable, StartStopable, SignalStopWrapper):
             self.exception("Failed to stop telegram client")
         else:
             self.info("Telegram client stopped stopped")
+        self.debug("Stopping cluster proxy..")
+        try:
+            self._cluster_proxy.stop()
+        except:
+            self.exception("Failed to stop cluster proxy")
+        else:
+            self.info("RPC proxy stopped")
+        finally:
+            self._proxy = None
 
 
 if __name__ == "__main__":
@@ -226,11 +276,7 @@ if __name__ == "__main__":
         bool(os.getenv('SUPERVISOR_ENABLED', False)))
     )
 
-    settings_file = args.settings
-    sett = {}
-    if settings_file:
-        sett['settings_file'] = settings_file
-
+    setup_kombu()
     instance = TelegramRunner(sett)
 
     try:

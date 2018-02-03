@@ -6,10 +6,10 @@ from __future__ import unicode_literals
 
 __author__ = "d01"
 __email__ = "jungflor@gmail.com"
-__copyright__ = "Copyright (C) 2017, Florian JUNG"
+__copyright__ = "Copyright (C) 2017-18, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.1.3"
-__date__ = "2017-12-02"
+__version__ = "0.1.4"
+__date__ = "2018-02-02"
 # Created: 2017-07-07 19:16
 
 from pprint import pformat
@@ -37,6 +37,9 @@ class TelegramClient(Loadable, StartStopable):
         self._user_map = settings.get('user_map', {})
         """ Map telegram user ids to internal uuids
             :type : dict[int, string] | unicode """
+        self._user_whitelist = settings.get('user_whitelist', None)
+        """ :type : None | list[int] | str | unicode """
+
         self._updater = Updater(
             token=settings['token']
         )
@@ -103,7 +106,7 @@ class TelegramClient(Loadable, StartStopable):
             self.debug("Loading user mappings from {}".format(path))
 
             try:
-                umap = self.load_settings(path)
+                umap = self.load_file(path)
                 self.info(
                     "User mappings loaded ({} entries)".format(len(umap))
                 )
@@ -113,19 +116,51 @@ class TelegramClient(Loadable, StartStopable):
                     path
                 ))
 
+    def whitelist_load(self):
+        if not self._user_whitelist:
+            return
+        if isinstance(self._user_whitelist, (string_types, text_type)):
+            path = self.join_path_prefix(self._user_whitelist)
+            self.debug("Loading user whitelist from {}".format(path))
+
+            try:
+                ulist = self.load_file(path)
+                self.info(
+                    "User whitelist loaded ({} entries)".format(len(ulist))
+                )
+                self._user_whitelist = [int(v) for v in ulist]
+            except:
+                self.exception("Failed to load user whitelist from {}".format(
+                    path
+                ))
+
+    def get_user_external(self, user_id):
+        return None
+
+    def get_user(self, user_id):
+        try:
+            user = self.get_user_external(user_id)
+        except:
+            self.exception("Failed to get user from external")
+            user = None
+        if not user:
+            user = self._user_map.get(user_id)
+        return user
+
     def _error_handler(self, bot, update, error):
         try:
-            self.error(update)
+            if update:
+                self.error(update)
             raise error
         except telegram.error.Unauthorized:
             self.error("Remove update.message.chat_id from conversation list")
         except telegram.error.BadRequest:
             self.exception("Handle malformed requests")
         except telegram.error.TimedOut:
-            self.error("Handle slow connection problems")
+            self.warning("Handle slow connection problems")
         except telegram.error.NetworkError:
             self.exception("Handle other connection problems")
-        except telegram.error.ChatMigrated as e:
+        except telegram.error.ChatMigrated:
             self.error(
                 "Chat_id of a group has changed, use e.new_chat_id instead"
             )
@@ -150,10 +185,22 @@ class TelegramClient(Loadable, StartStopable):
 
         if user:
             result['user'] = user.to_dict()
-            result['mapped_user'] = self._user_map.get(user.id)
+            if isinstance(self._user_whitelist, list):
+                # If whitelist is list -> user must be inside
+                if not user.id in self._user_whitelist:
+                    self.warning("Blocked not whitelisted user\n{}".format(
+                        result['user']
+                    ))
+                    return None
+
+            result['mapped_user'] = self.get_user(user.id)
             if not result['mapped_user'] and self._block_unknown:
                 self.warning("Blocked unknown user\n{}".format(result['user']))
                 return None
+        else:
+            self.error("No user - blocking")
+            return None
+
         if chat:
             result['chat'] = chat.to_dict()
         if message:
@@ -344,6 +391,7 @@ class TelegramClient(Loadable, StartStopable):
             # Got commands
             self.new_text.set()
         self.map_load()
+        self.whitelist_load()
         self._updater.dispatcher.add_error_handler(self._error_handler)
         self._updater.dispatcher.add_handler(MessageHandler(
             Filters.command, self._command_handler
