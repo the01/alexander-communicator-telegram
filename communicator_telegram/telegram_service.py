@@ -19,6 +19,8 @@ from alexander_fw.dto import InputMessage
 from flotils import get_logger
 
 from .telegram import TelegramClient
+from . import __version__ as module_version
+
 
 logger = get_logger()
 
@@ -49,13 +51,29 @@ class TelegramDependency(DependencyProvider):
 
 class StandaloneTelegramService(StandaloneCommunicatorService):
     name = "service_communicator_telegram"
-    allowed = ["status", "say", "send"]
+    allowed = ["status", "version", "say", "send", "send_user"]
     telegram = None
     """ :type : communicator_telegram.TelegramClient """
+
+    def version(self):
+        return module_version
 
     def send(self, to, text, reply_to_message_id=None, silent=False):
         # TODO send by user name
         self.telegram.send(to, text, reply_to_message_id, silent)
+
+    def get_user(self, meta):
+        if not meta:
+            return None
+        if meta.get('user') and meta['user'].get('id'):
+            return meta['user']['id']
+        return None
+
+    def send_user(
+            self, user_uuid, text, reply_to_message_id=None, silent=False
+    ):
+        eid = self.get_user({'mapped_user': user_uuid})
+        self.send(eid, text, reply_to_message_id, silent)
 
     def do_say(self, msg):
         """
@@ -75,8 +93,8 @@ class StandaloneTelegramService(StandaloneCommunicatorService):
                 reply = meta['message_id']
             if meta.get('chat'):
                 to = meta['chat']['id']
-            if to is None and meta.get('user'):
-                to = meta['user']['id']
+            if to is None:
+                to = self.get_user(meta)
             text = msg.result
         if text and to:
             self.telegram.send(to, text, reply)

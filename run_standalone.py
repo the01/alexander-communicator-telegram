@@ -47,6 +47,8 @@ class TelegramRunner(Loadable, StartStopable, SignalStopWrapper):
         self.service = StandaloneTelegramService()
         self.service.dispatch_intent = self._dispatch_intent
         self.service.telegram = self.telegram
+        self._service_get_user = self.service.get_user
+        self.service.get_user = self._rpc_service_user_external_id
         nameko_settings['service_name'] = self.service.name
         nameko_settings['service'] = self.service
         nameko_settings['allowed_functions'] = self.service.allowed
@@ -120,6 +122,24 @@ class TelegramRunner(Loadable, StartStopable, SignalStopWrapper):
             return None
         self.debug("Matched user: {}".format(user))
         return user.get('uuid')
+
+    def _rpc_service_user_external_id(self, meta):
+        self.debug("({})".format(meta))
+        eid = self._service_get_user(meta)
+        if eid is not None:
+            return eid
+        if not meta or not meta.get('mapped_user'):
+            return None
+        if not self._proxy:
+            self.warning("No proxy available")
+            return None
+
+        resp = self._proxy.service_user.external_id(
+            meta['mapped_user'], self.service.name
+        )
+        if not resp:
+            return None
+        return resp
 
     def start(self, blocking=False):
         self.debug("()")
