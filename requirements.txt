@@ -2,4 +2,4 @@ flotils>=0.4, <0.5
 nameko>=2.6.0, <2.9
 alexander_fw>=0.3.1, <0.5
 six
-python-telegram-bot>=9.0, <10
+python-telegram-bot>=9.0, <11
