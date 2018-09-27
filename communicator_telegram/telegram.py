@@ -8,7 +8,7 @@ __author__ = "d01"
 __email__ = "jungflor@gmail.com"
 __copyright__ = "Copyright (C) 2017-18, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.1.6"
+__version__ = "0.1.7"
 __date__ = "2018-09-27"
 # Created: 2017-07-07 19:16
 
@@ -371,13 +371,13 @@ class TelegramClient(Loadable, StartStopable):
                         self._updater.bot.send_photo(
                             to, bio, reply_to_message_id=reply_to_message_id
                         )
-                        return
+                        continue
                     except TimedOut:
                         if tries >= self._max_resends:
                             raise
                         self.warning("Send timed out, retrying #{}..".format(tries))
                         return self.send(
-                            to, text, reply_to_message_id, silent, tries + 1
+                            to, inp_list[i:], reply_to_message_id, silent, tries + 1
                         )
             if text:
                 text = "{}".format(text)
