@@ -8,8 +8,8 @@ __author__ = "d01"
 __email__ = "jungflor@gmail.com"
 __copyright__ = "Copyright (C) 2017-18, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.1.4"
-__date__ = "2018-02-02"
+__version__ = "0.1.5"
+__date__ = "2018-09-27"
 # Created: 2017-07-07 19:16
 
 from pprint import pformat
@@ -167,12 +167,14 @@ class TelegramClient(Loadable, StartStopable):
         except telegram.error.TelegramError:
             self.exception("Telegram exception occured")
 
-    def _parse_message(self, update):
+    def _parse_message(self, update, bot):
         """
         Parse update and return result
 
         :param update: Update to parse
         :type update: telegram.Update
+        :param bot:
+        :type bot: telegram.Bot
         :return: Parsed result
         :rtype: dict
         """
@@ -223,6 +225,17 @@ class TelegramClient(Loadable, StartStopable):
             result['message'] = message.text
             if message.location:
                 result['location'] = message.location.to_dict()
+            if message.photo:
+                psize = message.photo[-1]
+                file = bot.get_file(psize.file_id)
+                self.debug(file)
+                bio = BytesIO()
+                bio.name = "image"
+                file.download(out=bio)
+                bio.flush()
+                bio.seek(0)
+                result['photo'] = base64.b64encode(bio.read())
+                bio.close()
 
             # self.debug(message.parse_entities())
         return result
@@ -239,7 +252,7 @@ class TelegramClient(Loadable, StartStopable):
         :type user_data: dict
         :rtype: None
         """
-        result = self._parse_message(update)
+        result = self._parse_message(update, bot)
         if result is None:
             # Blocked user
             return
@@ -264,7 +277,7 @@ class TelegramClient(Loadable, StartStopable):
         :type update: telegram.Update
         :rtype: None
         """
-        result = self._parse_message(update)
+        result = self._parse_message(update, bot)
         if result is None:
             # Blocked user
             return
@@ -401,6 +414,9 @@ class TelegramClient(Loadable, StartStopable):
         ))
         self._updater.dispatcher.add_handler(MessageHandler(
             Filters.location, self._text_handler, pass_user_data=True
+        ))
+        self._updater.dispatcher.add_handler(MessageHandler(
+            Filters.photo, self._text_handler, pass_user_data=True
         ))
 
         self._updater.start_polling(

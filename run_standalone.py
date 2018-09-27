@@ -221,7 +221,7 @@ class TelegramRunner(Loadable, StartStopable, SignalStopWrapper):
         except:
             self.exception("Failed to stop telegram client")
         else:
-            self.info("Telegram client stopped stopped")
+            self.info("Telegram client stopped")
         self.debug("Stopping cluster proxy..")
         try:
             self._cluster_proxy.stop()
