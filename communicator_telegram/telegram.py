@@ -8,7 +8,7 @@ __author__ = "d01"
 __email__ = "jungflor@gmail.com"
 __copyright__ = "Copyright (C) 2017-18, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.1.5"
+__version__ = "0.1.6"
 __date__ = "2018-09-27"
 # Created: 2017-07-07 19:16
 
@@ -352,44 +352,48 @@ class TelegramClient(Loadable, StartStopable):
                 self.new_text.clear()
 
     def send(self, to, text, reply_to_message_id=None, silent=False, tries=0):
-        if isinstance(text, dict) and text.get('type') == "image":
-            try:
-                decoded = base64.b64decode(text.get('value'))
-                bio = BytesIO()
-                bio.name = "image"
-                bio.write(decoded)
-                bio.flush()
-                bio.seek(0)
-            except:
-                self.debug("Not b64")
-            else:
+        inp_list = text
+        if not isinstance(inp_list, list):
+            inp_list = [inp_list]
+        for i, text in enumerate(inp_list):
+            if isinstance(text, dict) and text.get('type') == "image":
                 try:
-                    self._updater.bot.send_photo(
-                        to, bio, reply_to_message_id=reply_to_message_id
-                    )
-                    return
-                except TimedOut:
-                    if tries >= self._max_resends:
-                        raise
-                    self.warning("Send timed out, retrying #{}..".format(tries))
-                    return self.send(
-                        to, text, reply_to_message_id, silent, tries + 1
-                    )
-        if text:
-            text = "{}".format(text)
+                    decoded = base64.b64decode(text.get('value'))
+                    bio = BytesIO()
+                    bio.name = "image"
+                    bio.write(decoded)
+                    bio.flush()
+                    bio.seek(0)
+                except:
+                    self.debug("Not b64")
+                else:
+                    try:
+                        self._updater.bot.send_photo(
+                            to, bio, reply_to_message_id=reply_to_message_id
+                        )
+                        return
+                    except TimedOut:
+                        if tries >= self._max_resends:
+                            raise
+                        self.warning("Send timed out, retrying #{}..".format(tries))
+                        return self.send(
+                            to, text, reply_to_message_id, silent, tries + 1
+                        )
+            if text:
+                text = "{}".format(text)
 
-        try:
-            self._updater.bot.send_message(
-                to, text, reply_to_message_id=reply_to_message_id,
-                disable_notification=silent
-            )
-        except TimedOut:
-            if tries >= self._max_resends:
-                raise
-            self.warning("Send timed out, retrying #{}..".format(tries))
-            return self.send(
-                to, text, reply_to_message_id, silent, tries + 1
-            )
+            try:
+                self._updater.bot.send_message(
+                    to, text, reply_to_message_id=reply_to_message_id,
+                    disable_notification=silent
+                )
+            except TimedOut:
+                if tries >= self._max_resends:
+                    raise
+                self.warning("Send timed out, retrying #{}..".format(tries))
+                return self.send(
+                    to, inp_list[i:], reply_to_message_id, silent, tries + 1
+                )
 
     def reply(self, to, text, reply_to_message_id, silent=False):
         self.send(to, text, reply_to_message_id, silent)
