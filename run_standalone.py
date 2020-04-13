@@ -6,14 +6,14 @@ from __future__ import unicode_literals
 
 __author__ = "d01"
 __email__ = "jungflor@gmail.com"
-__copyright__ = "Copyright (C) 2017, Florian JUNG"
+__copyright__ = "Copyright (C) 2017-20, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.1.1"
-__date__ = "2017-12-02"
+__version__ = "0.1.2"
+__date__ = "2020-04-14"
 # Created: 2017-07-08 13:34
 
-import threading
 import errno
+import threading
 import time
 
 from flotils.runable import SignalStopWrapper
@@ -147,11 +147,12 @@ class TelegramRunner(Loadable, StartStopable, SignalStopWrapper):
         self.debug("Starting rpc proxy..")
         tries = 3
         sleep_time = 1.4
+
         while tries > 0:
             self.debug("Trying to establish nameko proxy..")
             try:
                 self._proxy = self._cluster_proxy.start()
-            except:
+            except Exception:
                 if tries <= 1:
                     raise
                 self.exception("Failed to connect proxy")
@@ -161,24 +162,30 @@ class TelegramRunner(Loadable, StartStopable, SignalStopWrapper):
             else:
                 break
             tries -= 1
+
         self.service.proxy = self._proxy
         self.debug("Starting telegram client..")
+
         try:
             self.telegram.start(False)
-        except:
+        except Exception:
             self.exception("Failed to start telegram client")
             self.stop()
             return
+
         self.info("Telegram client running")
-        self.debug("Starting rpc listener")
+        self.debug("Starting rpc listener..")
+
         try:
             self.listener.start(False)
-        except:
+        except Exception:
             self.exception("Failed to start rpc listener")
             self.stop()
             return
+
         self.info("RPC listener running")
         self._done.clear()
+
         if blocking:
             try:
                 self._run_message_watcher()
@@ -187,7 +194,7 @@ class TelegramRunner(Loadable, StartStopable, SignalStopWrapper):
                     self.warning("Interrupted function in message loop")
                 else:
                     self.exception("Failed to run message loop")
-            except:
+            except Exception:
                 self.exception("Failed to run message loop")
                 self.stop()
                 return
@@ -199,7 +206,7 @@ class TelegramRunner(Loadable, StartStopable, SignalStopWrapper):
                 )
                 a_thread.daemon = True
                 a_thread.start()
-            except:
+            except Exception:
                 self.exception("Failed to run message loop")
                 self.stop()
                 return

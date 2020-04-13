@@ -6,16 +6,17 @@ from __future__ import unicode_literals
 
 __author__ = "d01"
 __email__ = "jungflor@gmail.com"
-__copyright__ = "Copyright (C) 2017-18, Florian JUNG"
+__copyright__ = "Copyright (C) 2017-20, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.1.7"
-__date__ = "2018-09-27"
+__version__ = "0.2.0"
+__date__ = "2020-04-13"
 # Created: 2017-07-07 19:16
 
 from pprint import pformat
 import datetime
 import threading
 import time
+import typing
 import base64
 from io import BytesIO
 
@@ -29,26 +30,32 @@ from telegram.error import TimedOut
 
 class TelegramClient(Loadable, StartStopable):
     
-    def __init__(self, settings=None):
+    def __init__(
+            self, settings: typing.Optional[typing.Dict[str, typing.Any]] = None
+    ) -> None:
         if settings is None:
             settings = {}
-        super(TelegramClient, self).__init__(settings)
-        self._cache_path = self.join_path_prefix(settings.get('cache_path'))
-        self._user_map = settings.get('user_map', {})
-        """ Map telegram user ids to internal uuids
-            :type : dict[int, string] | unicode """
-        self._user_whitelist = settings.get('user_whitelist', None)
-        """ :type : None | list[int] | str | unicode """
+        super().__init__(settings)
+
+        self._cache_path: typing.Optional[str] = self.join_path_prefix(
+            settings.get('cache_path')
+        )
+        self._user_map: typing.Union[typing.Dict[int, str], str] = \
+            settings.get('user_map', {})
+        """ Map telegram user ids to internal uuids """
+        self._user_whitelist: typing.Optional[str, typing.List[int]] = \
+            settings.get('user_whitelist', None)
+        """ TODO """
 
         self._updater = Updater(
-            token=settings['token']
+            token=settings['token'], use_context=True,
         )
-        self._poll_interval = settings.get("telegram_poll_interval", 0.0)
-        self._timeout = settings.get("telegram_timeout", 10.0)
-        self._block_unknown = settings.get("block_unknown_users", True)
-        self._max_resends = settings.get("max_retry_send", 2)
-        self._command_queue = []
-        self._text_queue = []
+        self._poll_interval: float = settings.get("telegram_poll_interval", 0.0)
+        self._timeout: float = settings.get("telegram_timeout", 10.0)
+        self._block_unknown: bool = settings.get("block_unknown_users", True)
+        self._max_resends: int = settings.get("max_retry_send", 2)
+        self._command_queue: typing.List = []
+        self._text_queue: typing.List = []
         self._queue_lock = threading.RLock()
         self.new_text = threading.Event()
         """ New text in queue """
@@ -81,7 +88,7 @@ class TelegramClient(Loadable, StartStopable):
                         len(self._command_queue), len(self._text_queue)
                     )
                 )
-        except:
+        except Exception:
             self.exception("Failed to load cache ({})".format(self._cache_path))
 
     def cache_save(self):
@@ -97,7 +104,7 @@ class TelegramClient(Loadable, StartStopable):
                     len(self._command_queue), len(self._text_queue)
                 )
             )
-        except:
+        except Exception:
             self.exception("Failed to save cache ({])".format(self._cache_path))
 
     def map_load(self):
@@ -140,18 +147,21 @@ class TelegramClient(Loadable, StartStopable):
     def get_user(self, user_id):
         try:
             user = self.get_user_external(user_id)
-        except:
+        except Exception:
             self.exception("Failed to get user from external")
             user = None
         if not user:
             user = self._user_map.get(user_id)
         return user
 
-    def _error_handler(self, bot, update, error):
+    # def _error_handler(self, bot, update, error):
+    def _error_handler(
+            self, update: telegram.Update, context: telegram.ext.CallbackContext
+    ) -> None:
         try:
             if update:
                 self.error(update)
-            raise error
+            raise context.error
         except telegram.error.Unauthorized:
             self.error("Remove update.message.chat_id from conversation list")
         except telegram.error.BadRequest:
@@ -165,24 +175,22 @@ class TelegramClient(Loadable, StartStopable):
                 "Chat_id of a group has changed, use e.new_chat_id instead"
             )
         except telegram.error.TelegramError:
-            self.exception("Telegram exception occured")
+            self.exception("Telegram exception occurred")
 
-    def _parse_message(self, update, bot):
+    def _parse_message(
+            self, update: telegram.Update, bot: telegram.Bot
+    ) -> typing.Optional[typing.Dict[str, typing.Any]]:
         """
         Parse update and return result
 
         :param update: Update to parse
-        :type update: telegram.Update
         :param bot:
-        :type bot: telegram.Bot
         :return: Parsed result
-        :rtype: dict
         """
         result = {}
         user = update.effective_user
         chat = update.effective_chat
-        message = update.effective_message
-        """ :type : telegram.Message """
+        message: telegram.Message = update.effective_message
         result['update_id'] = update.update_id
 
         if user:
@@ -240,22 +248,16 @@ class TelegramClient(Loadable, StartStopable):
             # self.debug(message.parse_entities())
         return result
 
-    def _text_handler(self, bot, update, user_data=None):
-        """
-        Handle incoming text messages
+    def _text_handler(
+            self, update: telegram.Update, context: telegram.ext.CallbackContext
+    ):
+        result = self._parse_message(update, context.bot)
 
-        :param bot: bot
-        :type bot: telegram.Bot
-        :param update: Message
-        :type update: telegram.Update
-        :param user_data: Custom user data
-        :type user_data: dict
-        :rtype: None
-        """
-        result = self._parse_message(update, bot)
         if result is None:
             # Blocked user
             return
+
+        user_data = context.user_data
 
         if user_data:
             self.debug("User data: {}".format(pformat(user_data)))
@@ -267,17 +269,17 @@ class TelegramClient(Loadable, StartStopable):
             else:
                 self.warning("Did not add message\n{}".format(update))
 
-    def _command_handler(self, bot, update, args=None):
+    def _command_handler(
+            self, update: telegram.Update, context: telegram.ext.CallbackContext
+    ) -> None:
         """
         Handle incoming command messages
 
         :param bot: bot
-        :type bot: telegram.Bot
         :param update: Message
-        :type update: telegram.Update
-        :rtype: None
         """
-        result = self._parse_message(update, bot)
+        result = self._parse_message(update, context.bot)
+
         if result is None:
             # Blocked user
             return
@@ -286,6 +288,7 @@ class TelegramClient(Loadable, StartStopable):
             parts = result['message'][1:].split()
             result['command'] = parts[0]
             result['args'] = " ".join(parts[1:])
+
         with self._queue_lock:
             if result:
                 self._command_queue.append(result)
@@ -293,23 +296,20 @@ class TelegramClient(Loadable, StartStopable):
             else:
                 self.warning("Did not add command\n{}".format(update))
 
-    def get_commands(self):
+    def get_commands(self) -> typing.List[typing.Dict[str, typing.Any]]:
         """
         Return all received commands
 
         :return: Rx commands
-        :rtype: list[dict[unicode, object]]
         """
         with self._queue_lock:
             return self._command_queue[:]
 
-    def delete_commands(self, ids):
+    def delete_commands(self, ids: typing.List[int]) -> None:
         """
         Delete commands from queue
 
         :param ids: Which updates to delete
-        :type ids: list[int]
-        :rtype: None
         """
         if not ids:
             return
@@ -322,26 +322,24 @@ class TelegramClient(Loadable, StartStopable):
             if len(self._command_queue) == 0:
                 self.new_command.clear()
 
-    def get_texts(self):
+    def get_texts(self) -> typing.List[typing.Dict[str, typing.Any]]:
         """
         Return all received texts
 
         :return: Rx texts
-        :rtype: list[dict[unicode, object]]
         """
         with self._queue_lock:
             return self._text_queue[:]
 
-    def delete_texts(self, ids):
+    def delete_texts(self, ids: typing.List[int]) -> None:
         """
         Delete texts from queue
 
         :param ids: Which updates to delete
-        :type ids: list[int]
-        :rtype: None
         """
         if not ids:
             return
+
         with self._queue_lock:
             self._text_queue = [
                 cmd
@@ -351,10 +349,17 @@ class TelegramClient(Loadable, StartStopable):
             if len(self._text_queue) == 0:
                 self.new_text.clear()
 
-    def send(self, to, text, reply_to_message_id=None, silent=False, tries=0):
+    def send(
+            self,
+            to: typing.Union[str, int],
+            text: typing.Union[str, typing.List[typing.Union[str, dict]], dict],
+            reply_to_message_id=None, silent: bool = False, tries: int = 0,
+    ) -> None:
         inp_list = text
+
         if not isinstance(inp_list, list):
             inp_list = [inp_list]
+
         for i, text in enumerate(inp_list):
             if isinstance(text, dict) and text.get('type') == "image":
                 try:
@@ -364,7 +369,7 @@ class TelegramClient(Loadable, StartStopable):
                     bio.write(decoded)
                     bio.flush()
                     bio.seek(0)
-                except:
+                except Exception:
                     self.debug("Not b64")
                 else:
                     try:
@@ -395,32 +400,41 @@ class TelegramClient(Loadable, StartStopable):
                     to, inp_list[i:], reply_to_message_id, silent, tries + 1
                 )
 
-    def reply(self, to, text, reply_to_message_id, silent=False):
+    def reply(
+            self,
+            to: typing.Union[str, int],
+            text: typing.Union[str, typing.List[typing.Union[str, dict]], dict],
+            reply_to_message_id, silent: bool = False
+    ):
         self.send(to, text, reply_to_message_id, silent)
 
-    def start(self, blocking=False):
+    def start(self, blocking: bool = False):
         self.debug("()")
         self.cache_load()
+
         if self._command_queue:
             # Got commands
             self.new_command.set()
         if self._text_queue:
             # Got commands
             self.new_text.set()
+
         self.map_load()
         self.whitelist_load()
+
+        # Setup telegram callbacks
         self._updater.dispatcher.add_error_handler(self._error_handler)
         self._updater.dispatcher.add_handler(MessageHandler(
             Filters.command, self._command_handler
         ))
         self._updater.dispatcher.add_handler(MessageHandler(
-            Filters.text, self._text_handler, pass_user_data=True
+            Filters.text, self._text_handler,
         ))
         self._updater.dispatcher.add_handler(MessageHandler(
-            Filters.location, self._text_handler, pass_user_data=True
+            Filters.location, self._text_handler,
         ))
         self._updater.dispatcher.add_handler(MessageHandler(
-            Filters.photo, self._text_handler, pass_user_data=True
+            Filters.photo, self._text_handler,
         ))
 
         self._updater.start_polling(
@@ -430,8 +444,11 @@ class TelegramClient(Loadable, StartStopable):
 
     def stop(self):
         self.debug("()")
-        super(TelegramClient, self).stop()
+        super().stop()
         self.cache_save()
         # Keeps hanging???
-        self._updater.stop()
+        try:
+            self._updater.stop()
+        except Exception:
+            self.exception("Failed to stop updater")
         self.cache_save()
